@@ -7,7 +7,7 @@ from pathlib import Path
 from numpy import random
 from random import randint
 import torch.backends.cudnn as cudnn
-
+from robomaster import robot
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
 from utils.general import check_img_size, check_requirements, \
@@ -17,7 +17,7 @@ from utils.general import check_img_size, check_requirements, \
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, \
                 time_synchronized, TracedModel
-from utils.download_weights import download
+# from utils.download_weights import download
 
 #For SORT tracking
 import skimage
@@ -82,6 +82,7 @@ def detect(save_img=False):
         rand_color = (r, g, b)
         rand_color_list.append(rand_color)
     #......................................
+    # python3 detect_and_track.py --weights yolov7-tiny.pt --source http://192.168.224.242:40921
    
 
     # Directories
@@ -151,6 +152,8 @@ def detect(save_img=False):
         t1 = time_synchronized()
         pred = model(img, augment=opt.augment)[0]
         t2 = time_synchronized()
+        fps=1/(t2-t1)
+        print(fps)
 
         # Apply NMS
         pred = non_max_suppression(pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms)
@@ -188,6 +191,25 @@ def detect(save_img=False):
                 for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
                     dets_to_sort = np.vstack((dets_to_sort, 
                                 np.array([x1, y1, x2, y2, conf, detclass])))
+                    print([x1,y1,x2,y2])
+                    
+                    
+                    ep_robot = robot.Robot()
+                    ep_robot.initialize(conn_type="sta")
+
+                    ep_chassis = ep_robot.chassis
+                    x_val = 0.5
+                    y_val = 0.6
+                    z_val = 90
+                    if(x1>570):
+                        ep_chassis.move(x=0, y=y_val, z=0, xy_speed=0.7).wait_for_completed()
+                    if(x1<300):
+                        ep_chassis.move(x=0, y=-y_val, z=0, xy_speed=0.7).wait_for_completed()
+                    if(y1>400):
+                        ep_chassis.move(x=x_val, y=0, z=0, xy_speed=0.7).wait_for_completed()
+                    if(y1<200):
+                        ep_chassis.move(x=-x_val, y=0, z=0, xy_speed=0.7).wait_for_completed()
+                    
                 
                 # Run SORT
                 tracked_dets = sort_tracker.update(dets_to_sort)
@@ -276,9 +298,9 @@ def detect(save_img=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
-    parser.add_argument('--download', action='store_true', help='download model weights automatically')
-    parser.add_argument('--no-download', dest='download', action='store_false',help='not download model weights if already exist')
+    parser.add_argument('--weights', nargs='+', type=str, default='yolov7-tiny.pt', help='model.pt path(s)')
+    # parser.add_argument('--download', action='store_true', help='download model weights automatically')
+    # parser.add_argument('--no-download', dest='download', action='store_false',help='not download model weights if already exist')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
@@ -304,13 +326,13 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     print(opt)
     #check_requirements(exclude=('pycocotools', 'thop'))
-    if opt.download and not os.path.exists(str(opt.weights)):
-        print('Model weights not found. Attempting to download now...')
-        download('./')
+    # if opt.download and not os.path.exists(str(opt.weights)):
+    #     print('Model weights not found. Attempting to download now...')
+        # download('./')
 
     with torch.no_grad():
         if opt.update:  # update all models (to fix SourceChangeWarning)
-            for opt.weights in ['yolov7.pt']:
+            for opt.weights in ['yolov7-tiny.pt']:
                 detect()
                 strip_optimizer(opt.weights)
         else:
